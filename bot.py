@@ -6,7 +6,7 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import CommandStart, Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiohram.client.default import DefaultBotProperties
+from aiogram.client.default import DefaultBotProperties
 
 from settings import settings
 from database import (
