@@ -6,6 +6,7 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import CommandStart, Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiohram.client.default import DefaultBotProperties
 
 from settings import settings
 from database import (
@@ -29,7 +30,10 @@ def _run_http():
 def start_http():
     Thread(target=_run_http, daemon=True).start()
 
-BOT = Bot(settings.BOT_TOKEN, parse_mode="HTML")
+BOT = Bot(
+    token=settings.BOT_TOKEN, 
+    default=DefaultBotProperties(parse_mode="HTML")
+)
 dp = Dispatcher()
 
 # --- helpers ---
