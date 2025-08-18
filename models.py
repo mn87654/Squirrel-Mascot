@@ -38,4 +38,4 @@ class TaskCompletion(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_tg_id: Mapped[int] = mapped_column(BigInteger, index=True)
     task_id: Mapped[int] = mapped_column(Integer, ForeignKey("tasks.id"))
-    completed_at: Mapped[datetime] = mapped_column(timezone(timezone=True), default=utcnow)
+    completed_at: Mapped[datetime] = mapped_column(Datetime(timezone=True), default=utcnow)
