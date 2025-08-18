@@ -78,3 +78,13 @@ async def cb_balance(cb: CallbackQuery):
 async def cmd_balance(message: Message):
     bal = await get_balance(message.from_user.id)
     await message.reply(f"💰 Your Squirrel Coins: <b>{bal}</b>")
+    
+# --- main entry point ---
+async def main():
+    # start http server (Render ke liye health check)
+    start_http()
+    # start polling
+    await dp.start_polling(BOT)
+
+if __name__ == "__main__":
+    asyncio.run(main())
