@@ -1,12 +1,10 @@
-# bot.py
-import asyncio, os
-from flask import Flask
-from threading import Thread
-from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+# bot.py — Webhook version for Render (Aiogram 3.x)
+import os
+from aiohttp import web
+from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command
-from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiogram.client.default import DefaultBotProperties
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
 from settings import settings
 from database import (
@@ -16,38 +14,32 @@ from database import (
 )
 from services import is_member, make_ref_link
 
-# --- tiny HTTP server so Render health checks succeed ---
-flask_app = Flask(__name__)
 
-@flask_app.get("/")
-def ok():
-    return "Squirrel Coins Bot is running!"
-
-def _run_http():
-    port = int(os.environ.get("PORT", 10000))
-    flask_app.run(host="0.0.0.0", port=port)
-
-def start_http():
-    Thread(target=_run_http, daemon=True).start()
-
-BOT = Bot(
-    token=settings.BOT_TOKEN, 
-    default=DefaultBotProperties(parse_mode="HTML")
-)
+# ---------------- Bot Setup ----------------
+BOT = Bot(settings.BOT_TOKEN, parse_mode="HTML")
 dp = Dispatcher()
 
-# --- helpers ---
+# ---------------- Webhook URL Setup ----------------
+# Preferred: set RENDER_URL = https://your-app.onrender.com
+# Alternate: set RENDER_EXTERNAL_HOSTNAME = your-app.onrender.com
+RENDER_URL = os.getenv("RENDER_URL") or f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}"
+WEBHOOK_PATH = "/webhook"
+WEBHOOK_URL = f"{RENDER_URL}{WEBHOOK_PATH}"
+
+
+# ---------------- Helpers ----------------
 def is_admin(user_id: int) -> bool:
     if not settings.ADMINS:
         return False
     return str(user_id) in {x.strip() for x in settings.ADMINS.split(",") if x.strip()}
 
 def rainbow_title() -> str:
-    return "🌈🧡💛💚💙💜 Squirrel Coins 💜💙💚💛🧡🌈"
+    return "🌈💜💛🧡 Squirrel Coins 💜💛🧡🌈"
 
-# --- handlers ---
+
+# ---------------- Handlers ----------------
 @dp.message(CommandStart())
-async def start(message: Message):
+async def start_cmd(message: Message):
     referrer = None
     parts = message.text.split(maxsplit=1)
     if len(parts) > 1 and parts[1].startswith("ref_"):
@@ -61,12 +53,17 @@ async def start(message: Message):
         await add_coins(referrer, settings.REFERRAL_REWARD)
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎁 Daily", callback_data="daily")],
+        [InlineKeyboardButton(text="📅 Daily", callback_data="daily")],
         [InlineKeyboardButton(text="📝 Tasks", callback_data="tasks")],
-        [InlineKeyboardButton(text="👥 Invite", callback_data="invite")],
+        [InlineKeyboardButton(text="🤝 Invite", callback_data="invite")],
         [InlineKeyboardButton(text="💰 Balance", callback_data="balance")],
     ])
-    await message.answer(f"{rainbow_title()}\n\nWelcome to the Rainbow Squirrel world!", reply_markup=kb)
+
+    await message.answer(
+        f"{rainbow_title()}\n\nWelcome to the Rainbow Squirrel world!",
+        reply_markup=kb
+    )
+
 
 @dp.callback_query(F.data == "balance")
 async def cb_balance(cb: CallbackQuery):
@@ -74,17 +71,33 @@ async def cb_balance(cb: CallbackQuery):
     await cb.message.edit_text(f"💰 Your Squirrel Coins: <b>{bal}</b>")
     await cb.answer()
 
+
 @dp.message(Command("balance"))
 async def cmd_balance(message: Message):
     bal = await get_balance(message.from_user.id)
     await message.reply(f"💰 Your Squirrel Coins: <b>{bal}</b>")
-    
-# --- main entry point ---
-async def main():
-    # start http server (Render ke liye health check)
-    start_http()
-    # start polling
-    await dp.start_polling(BOT)
+
+
+# ---------------- Webhook lifecycle ----------------
+async def on_startup(app):
+    await BOT.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
+    print(f"✅ Webhook set: {WEBHOOK_URL}")
+
+async def on_shutdown(app):
+    await BOT.delete_webhook()
+    print("🛑 Webhook deleted")
+
+
+def build_app():
+    app = web.Application()
+    app.on_startup.append(on_startup)
+    app.on_shutdown.append(on_shutdown)
+
+    # Register Telegram webhook handler
+    SimpleRequestHandler(dp, BOT).register(app, path=WEBHOOK_PATH)
+    setup_application(app, dp, bot=BOT)
+    return app
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    web.run_app(build_app(), host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
