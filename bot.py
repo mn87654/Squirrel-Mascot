@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
-from aiogram.client.default import DefaultBotProperties  # 👈 NEW import
+from aiogram.client.default import DefaultBotProperties
 
 from settings import settings
 from database import (
@@ -19,9 +19,7 @@ from services import is_member, make_ref_link
 # ---------------- Bot Setup ----------------
 BOT = Bot(
     settings.BOT_TOKEN,
-    default=DefaultBotProperties(
-        parse_mode="HTML"  # 👈 safe way in aiogram 3.7+
-    )
+    default=DefaultBotProperties(parse_mode="HTML")
 )
 dp = Dispatcher()
 
@@ -44,7 +42,7 @@ def rainbow_title() -> str:
 # ---------------- Handlers ----------------
 @dp.message(CommandStart())
 async def start_cmd(message: Message):
-    print(f"✅ /start received from {message.from_user.id}")   # 👈 Debug log
+    print(f"✅ /start received from {message.from_user.id}")   # Debug log
 
     referrer = None
     parts = message.text.split(maxsplit=1)
@@ -73,7 +71,7 @@ async def start_cmd(message: Message):
 
 @dp.callback_query(F.data == "balance")
 async def cb_balance(cb: CallbackQuery):
-    print(f"💰 Balance callback from {cb.from_user.id}")   # 👈 Debug log
+    print(f"💰 Balance callback from {cb.from_user.id}")   # Debug log
     bal = await get_balance(cb.from_user.id)
     await cb.message.edit_text(f"💰 Your Squirrel Coins: <b>{bal}</b>")
     await cb.answer()
@@ -81,17 +79,26 @@ async def cb_balance(cb: CallbackQuery):
 
 @dp.message(Command("balance"))
 async def cmd_balance(message: Message):
-    print(f"💰 /balance command from {message.from_user.id}")   # 👈 Debug log
+    print(f"💰 /balance command from {message.from_user.id}")   # Debug log
     bal = await get_balance(message.from_user.id)
     await message.reply(f"💰 Your Squirrel Coins: <b>{bal}</b>")
 
 
+# ✅ Extra Test Command
+@dp.message(Command("ping"))
+async def cmd_ping(message: Message):
+    print(f"🏓 Ping received from {message.from_user.id}")   # Debug log
+    await message.reply("🏓 Pong!")
+
+
 # ---------------- Webhook lifecycle ----------------
 async def on_startup(app):
+    print("🚀 Starting up... setting webhook")
     await BOT.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
     print(f"✅ Webhook set: {WEBHOOK_URL}")
 
 async def on_shutdown(app):
+    print("🛑 Shutting down... deleting webhook")
     await BOT.delete_webhook()
     print("🛑 Webhook deleted")
 
@@ -103,6 +110,7 @@ def build_app():
 
     # ✅ Health check route
     async def health(request):
+        print("👀 Health check called")
         return web.Response(text="OK")
     app.router.add_get("/", health)
 
