@@ -26,8 +26,6 @@ BOT = Bot(
 dp = Dispatcher()
 
 # ---------------- Webhook URL Setup ----------------
-# Preferred: set RENDER_URL = https://your-app.onrender.com
-# Alternate: set RENDER_EXTERNAL_HOSTNAME = your-app.onrender.com
 RENDER_URL = os.getenv("RENDER_URL") or f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}"
 WEBHOOK_PATH = "/webhook"
 WEBHOOK_URL = f"{RENDER_URL}{WEBHOOK_PATH}"
@@ -46,6 +44,8 @@ def rainbow_title() -> str:
 # ---------------- Handlers ----------------
 @dp.message(CommandStart())
 async def start_cmd(message: Message):
+    print(f"✅ /start received from {message.from_user.id}")   # 👈 Debug log
+
     referrer = None
     parts = message.text.split(maxsplit=1)
     if len(parts) > 1 and parts[1].startswith("ref_"):
@@ -73,6 +73,7 @@ async def start_cmd(message: Message):
 
 @dp.callback_query(F.data == "balance")
 async def cb_balance(cb: CallbackQuery):
+    print(f"💰 Balance callback from {cb.from_user.id}")   # 👈 Debug log
     bal = await get_balance(cb.from_user.id)
     await cb.message.edit_text(f"💰 Your Squirrel Coins: <b>{bal}</b>")
     await cb.answer()
@@ -80,6 +81,7 @@ async def cb_balance(cb: CallbackQuery):
 
 @dp.message(Command("balance"))
 async def cmd_balance(message: Message):
+    print(f"💰 /balance command from {message.from_user.id}")   # 👈 Debug log
     bal = await get_balance(message.from_user.id)
     await message.reply(f"💰 Your Squirrel Coins: <b>{bal}</b>")
 
@@ -98,6 +100,11 @@ def build_app():
     app = web.Application()
     app.on_startup.append(on_startup)
     app.on_shutdown.append(on_shutdown)
+
+    # ✅ Health check route
+    async def health(request):
+        return web.Response(text="OK")
+    app.router.add_get("/", health)
 
     # Register Telegram webhook handler
     SimpleRequestHandler(dp, BOT).register(app, path=WEBHOOK_PATH)
