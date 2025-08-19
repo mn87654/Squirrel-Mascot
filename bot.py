@@ -5,6 +5,7 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiogram.client.default import DefaultBotProperties  # 👈 NEW import
 
 from settings import settings
 from database import (
@@ -16,7 +17,12 @@ from services import is_member, make_ref_link
 
 
 # ---------------- Bot Setup ----------------
-BOT = Bot(settings.BOT_TOKEN, parse_mode="HTML")
+BOT = Bot(
+    settings.BOT_TOKEN,
+    default=DefaultBotProperties(
+        parse_mode="HTML"  # 👈 safe way in aiogram 3.7+
+    )
+)
 dp = Dispatcher()
 
 # ---------------- Webhook URL Setup ----------------
