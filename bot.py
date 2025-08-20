@@ -5,120 +5,63 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
-from aiogram.client.default import DefaultBotProperties
 
 from settings import settings
 from database import (
-    init_db, get_or_create_user, add_coins, set_coins, get_balance,
-    can_claim_daily, claim_daily, list_active_tasks, add_task, remove_task,
-    mark_task_complete, completed_today
+    init_db, get_or_create_user,
+    add_coins, set_balance, get_balance
 )
-from services import is_member, make_ref_link
 
-
-# ---------------- Bot Setup ----------------
-BOT = Bot(
-    settings.BOT_TOKEN,
-    default=DefaultBotProperties(parse_mode="HTML")
-)
+# Initialize bot & dispatcher
+BOT = Bot(token=settings.BOT_TOKEN)
 dp = Dispatcher()
 
-# ---------------- Webhook URL Setup ----------------
-RENDER_URL = os.getenv("RENDER_URL") or f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}"
-WEBHOOK_PATH = "/webhook"
-WEBHOOK_URL = f"{RENDER_URL}{WEBHOOK_PATH}"
 
-
-# ---------------- Helpers ----------------
-def is_admin(user_id: int) -> bool:
-    if not settings.ADMINS:
-        return False
-    return str(user_id) in {x.strip() for x in settings.ADMINS.split(",") if x.strip()}
-
-def rainbow_title() -> str:
-    return "🌈💜💛🧡 Squirrel Coins 💜💛🧡🌈"
-
-
-# ---------------- Handlers ----------------
+# --- Commands ---
 @dp.message(CommandStart())
-async def start_cmd(message: Message):
-    print(f"✅ /start received from {message.from_user.id}")   # Debug log
-
-    referrer = None
-    parts = message.text.split(maxsplit=1)
-    if len(parts) > 1 and parts[1].startswith("ref_"):
-        try:
-            referrer = int(parts[1][4:])
-        except Exception:
-            referrer = None
-
-    user, is_new = await get_or_create_user(message.from_user.id, referred_by=referrer)
-    if is_new and referrer and referrer != message.from_user.id:
-        await add_coins(referrer, settings.REFERRAL_REWARD)
-
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📅 Daily", callback_data="daily")],
-        [InlineKeyboardButton(text="📝 Tasks", callback_data="tasks")],
-        [InlineKeyboardButton(text="🤝 Invite", callback_data="invite")],
-        [InlineKeyboardButton(text="💰 Balance", callback_data="balance")],
-    ])
-
+async def cmd_start(message: Message):
+    print(f"✅ /start received from {message.from_user.id}")
     await message.answer(
-        f"{rainbow_title()}\n\nWelcome to the Rainbow Squirrel world!",
-        reply_markup=kb
+        "🌈💜💛🧡 Squirrel Coins 💜💛🧡🌈\n\n"
+        "Welcome to the Rainbow Squirrel world!"
     )
-
-
-@dp.callback_query(F.data == "balance")
-async def cb_balance(cb: CallbackQuery):
-    print(f"💰 Balance callback from {cb.from_user.id}")   # Debug log
-    bal = await get_balance(cb.from_user.id)
-    await cb.message.edit_text(f"💰 Your Squirrel Coins: <b>{bal}</b>")
-    await cb.answer()
-
 
 @dp.message(Command("balance"))
 async def cmd_balance(message: Message):
-    print(f"💰 /balance command from {message.from_user.id}")   # Debug log
-    bal = await get_balance(message.from_user.id)
-    await message.reply(f"💰 Your Squirrel Coins: <b>{bal}</b>")
+    user = await get_or_create_user(message.from_user.id)
+    print(f"✅ /balance requested by {message.from_user.id}, balance={user.balance}")
+    await message.answer(f"💰 Your balance: {user.balance} coins")
 
-
-# ✅ Extra Test Command
 @dp.message(Command("ping"))
 async def cmd_ping(message: Message):
-    print(f"🏓 Ping received from {message.from_user.id}")   # Debug log
-    await message.reply("🏓 Pong!")
+    print(f"✅ /ping received from {message.from_user.id}")
+    await message.answer("pong")
 
 
-# ---------------- Webhook lifecycle ----------------
-async def on_startup(app):
-    print("🚀 Starting up... setting webhook")
-    await BOT.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
-    print(f"✅ Webhook set: {WEBHOOK_URL}")
+# --- Universal handler (for testing) ---
+@dp.message()
+async def all_messages(message: Message):
+    print(f"📩 Got message: {message.text} from {message.from_user.id}")
+    await message.reply("I got your message ✅")
 
-async def on_shutdown(app):
-    print("🛑 Shutting down... deleting webhook")
+
+# --- Webhook setup ---
+async def on_startup(app: web.Application):
+    print("🚀 Bot is starting, initializing DB...")
+    await init_db()
+    await BOT.set_webhook(f"https://{settings.RENDER_EXTERNAL_HOSTNAME}/webhook")
+
+async def on_shutdown(app: web.Application):
+    print("🛑 Bot shutting down...")
     await BOT.delete_webhook()
-    print("🛑 Webhook deleted")
 
 
-def build_app():
+def main():
     app = web.Application()
-    app.on_startup.append(on_startup)
-    app.on_shutdown.append(on_shutdown)
-
-    # ✅ Health check route
-    async def health(request):
-        print("👀 Health check called")
-        return web.Response(text="OK")
-    app.router.add_get("/", health)
-
-    # Register Telegram webhook handler
-    SimpleRequestHandler(dp, BOT).register(app, path=WEBHOOK_PATH)
-    setup_application(app, dp, bot=BOT)
-    return app
+    SimpleRequestHandler(dp, BOT).register(app, path="/webhook")
+    setup_application(app, dp, on_startup=on_startup, on_shutdown=on_shutdown)
+    web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
 
 
 if __name__ == "__main__":
-    web.run_app(build_app(), host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
+    main()
